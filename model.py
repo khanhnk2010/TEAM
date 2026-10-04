@@ -25,9 +25,16 @@ class CNN_FSHead(nn.Module):
             backbone = timm.create_model('vit_base_patch16_224', pretrained=True, num_classes=0)
             self.backbone = backbone
             self.mid_dim = 768
+        for p in self.backbone.parameters():
+            p.requires_grad = False
 
         self.seq_len = self.args.seq_len
         self.agg_num = self.args.agg_num
+
+    def train(self, mode=True):
+        super().train(mode)
+        self.backbone.eval()
+        return self
 
     def get_feats(self, spt, tar):
         if self.args.backbone == "ResNet":
@@ -213,7 +220,7 @@ class TEAM_pos_neg(TEAM_pos):
 class TEAM_disc_without_sim(TEAM_pos):
     def __init__(self, args):
         super(TEAM_disc_without_sim, self).__init__(args)
-        self.DPM = Discriminative_Pattern_Matching_without_sim(self.agg_num, seq_len=self.seq_len)
+        self.DPM = Discriminative_Pattern_Matching_without_sim(self.agg_num, seq_len=self.seq_len, d_model=self.d_model)
 
     def get_cum_dists(self, spt_disc_pos, spt_disc_neg, spt_pos, spt_neg, tar_pos, tar_neg):
         cum_dists_pos = self.get_cum_dists_pos(spt_disc_pos, tar_pos)

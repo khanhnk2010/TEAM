@@ -17,6 +17,7 @@ from videotransforms.volume_transforms import ClipToTensor
 """Contains video frame paths and ground truth labels for a single split (e.g. train videos). """
 class Split():
     def __init__(self):
+        #gt_a: ground truth action aka labels
         self.gt_a_list = []
         self.videos = []
 
@@ -79,7 +80,6 @@ class VideoDataset(torch.utils.data.Dataset):
         self.test_split = Split()
 
         self.setup_transforms()
-        self._select_fold()
         self.read_dir()
 
     """Setup crop sizes/flips for augmentation during training and centre crop for testing"""
@@ -109,155 +109,61 @@ class VideoDataset(torch.utils.data.Dataset):
         self.transform["train"] = Compose(video_transform_list)
         self.transform["test"] = Compose(video_test_list)
 
-    """Loads all videos into RAM from an uncompressed zip. Necessary as the filesystem has a large block size, which is unsuitable for lots of images. """
-    """Contains some legacy code for loading images directly, but this has not been used/tested for a while so might not work with the current codebase. """
     def read_dir(self):
-        # load zipfile into memory
-        if self.data_dir.endswith('.zip'):
-            self.zip = True
-            zip_fn = os.path.join(self.data_dir)
-            self.mem = open(zip_fn, 'rb').read()
-            self.zfile = zipfile.ZipFile(io.BytesIO(self.mem))
-        else:
-            self.zip = False
-
-        # go through zip and populate splits with frame locations and action groundtruths
-        if self.zip:
-            dir_list = list(set([x for x in self.zfile.namelist() if '.jpg' not in x]))
-
-            class_folders = list(set([x.split(os.sep)[-3] for x in dir_list if len(x.split(os.sep)) > 2]))
+        split_folders = os.listdir(self.data_dir)
+        for split in split_folders:
+            c = self.get_train_val_or_test_db(split)
+            if c == None:
+                continue
+            class_folders = os.listdir(os.path.join(self.data_dir, split))
             class_folders.sort()
             self.class_folders = class_folders
-            video_folders = list(set([x.split(os.sep)[-2] for x in dir_list if len(x.split(os.sep)) > 3]))
-            video_folders.sort()
-            self.video_folders = video_folders
-
-            class_folders_indexes = {v: k for k, v in enumerate(self.class_folders)}
-            video_folders_indexes = {v: k for k, v in enumerate(self.video_folders)}
-
-            img_list = [x for x in self.zfile.namelist() if '.jpg' in x]
-            img_list.sort()
-
-            c = self.get_train_val_or_test_db(video_folders[0])
-
-            last_video_folder = None
-            last_video_class = -1
-            insert_frames = []
-            for img_path in img_list:
-
-                class_folder, video_folder, jpg = img_path.split(os.sep)[-3:]
-
-                if video_folder != last_video_folder:
-                    if len(insert_frames) >= self.seq_len:
-                        c = self.get_train_val_or_test_db(last_video_folder.lower())
-                        if c != None:
-                            c.add_vid(insert_frames, last_video_class)
-                        else:
-                            pass
-                    insert_frames = []
-                    class_id = class_folders_indexes[class_folder]
-                    vid_id = video_folders_indexes[video_folder]
-
-                insert_frames.append(img_path)
-                last_video_folder = video_folder
-                last_video_class = class_id
-
-            c = self.get_train_val_or_test_db(last_video_folder)
-            if c != None and len(insert_frames) >= self.seq_len:
-                c.add_vid(insert_frames, last_video_class)
-        else:
-            split_folders = os.listdir(self.data_dir)
-            for split in split_folders:
-                class_folders = os.listdir(os.path.join(self.data_dir, split))
-                class_folders.sort()
-                self.class_folders = class_folders
-                for class_folder in class_folders:
-                    video_folders = os.listdir(os.path.join(self.data_dir, split, class_folder))
-                    video_folders.sort()
-                    for video_folder in video_folders:
-                        c = self.get_train_val_or_test_db(video_folder)
-                        if c == None:
-                            continue
-                        imgs = os.listdir(os.path.join(self.data_dir, split, class_folder, video_folder))
-                        if len(imgs) < self.seq_len:
-                            continue
-                        imgs.sort()
-                        paths = [os.path.join(self.data_dir, split, class_folder, video_folder, img) for img in imgs]
-                        paths.sort()
-                        class_id = class_folders.index(class_folder)
-                        c.add_vid(paths, class_id)
+            for class_folder in class_folders:
+                video_folders = os.listdir(os.path.join(self.data_dir, split, class_folder))
+                video_folders.sort()
+                for video_folder in video_folders:
+                    
+                    imgs = os.listdir(os.path.join(self.data_dir, split, class_folder, video_folder))
+                    if len(imgs) < self.seq_len:
+                        continue
+                    imgs.sort()
+                    paths = [os.path.join(self.data_dir, split, class_folder, video_folder, img) for img in imgs]
+                    paths.sort()
+                    class_id = class_folders.index(class_folder)
+                    c.add_vid(paths, class_id)
         print("loaded {}".format(self.data_dir))
         print("train: {}, val: {}, test: {}".format(len(self.train_split), len(self.val_split), len(self.test_split)))
 
     """ return the current split being used """
-    def get_train_val_or_test_db(self, split=None):
-        if split is None:
-            if self.split == 'train':
-                return self.train_split
-            elif self.split == 'val':
-                return self.val_split
-            elif self.split == 'test':
-                return self.test_split
-            else:
-                return None
+    def get_train_val_or_test_db(self, split):
+        if split == 'train':
+            return self.train_split
+        elif split == 'val':
+            return self.val_split
+        elif split == 'test':
+            return self.test_split
         else:
-            if split in self.train_val_test_lists["train"]:
-                return self.train_split
-            elif split in self.train_val_test_lists["val"]:
-                return self.val_split
-            elif split in self.train_val_test_lists["test"]:
-                return self.test_split
-            else:
-                return None
-
-    """ load the paths of all videos in the train and test splits. """
-    def _select_fold(self):
-        lists = {}
-        for name in ["train", "val", "test"]:
-            fname = "{}list.txt".format(name)
-            f = os.path.join(self.annotation_path, fname)
-            selected_files = []
-            with open(f, "r") as fid:
-                data = fid.readlines()
-
-                if "kinetics" in self.args.dataset:
-                    data = [x.strip('\n') for x in data]
-                    data = [os.path.splitext(os.path.split(x)[1])[0] for x in data]
-                elif "ssv2_small_V2" in self.args.dataset:
-                    data = [x.strip('\n') for x in data]
-                    data = [os.path.splitext(os.path.split(x)[1])[0] for x in data]
-                else:
-                    data = [x.strip().split(" ")[0] for x in data]
-                    data = [os.path.splitext(os.path.split(x)[1])[0] for x in data]
-
-                selected_files.extend(data)
-            lists[name] = selected_files
-        self.train_val_test_lists = lists
+            return None
 
     """ Set len to large number as we use lots of random tasks. Stopping point controlled in run.py. """
     def __len__(self):
-        c = self.get_train_val_or_test_db()
+        c = self.get_train_val_or_test_db(self.split)
         return 1000000
         return len(c)
 
     """ Get the classes used for the current split """
     def get_split_class_list(self):
-        c = self.get_train_val_or_test_db()
+        c = self.get_train_val_or_test_db(self.split)
         classes = list(set(c.gt_a_list))
         classes.sort()
         return classes
 
     """Loads a single image from a specified path """
     def read_single_image(self, path):
-        if self.zip:
-            with self.zfile.open(path, 'r') as f:
-                with Image.open(f) as i:
-                    i.load()
-                    return i
-        else:
-            with Image.open(path) as i:
-                i.load()
-                return i
+        with Image.open(path) as i:
+            i.load()
+            return i
+
 
     """Gets a single video sequence. Handles sampling if there are more frames than specified. """
     def get_seq(self, label, idx=-1):

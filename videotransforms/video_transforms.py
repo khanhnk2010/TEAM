@@ -48,7 +48,7 @@ class RandomHorizontalFlip(object):
                 return [np.fliplr(img) for img in clip]
             elif isinstance(clip[0], PIL.Image.Image):
                 return [
-                    img.transpose(PIL.Image.FLIP_LEFT_RIGHT) for img in clip
+                    img.transpose(PIL.Image.Transpose.FLIP_LEFT_RIGHT) for img in clip
                 ]
             else:
                 raise TypeError('Expected numpy.ndarray or PIL.Image' +
@@ -394,8 +394,8 @@ class ColorJitter(object):
             jittered_clip = []
             for img in clip:
                 for func in img_transforms:
-                    jittered_img = func(img)
-                jittered_clip.append(jittered_img)
+                    img = func(img)
+                jittered_clip.append(img)
 
         else:
             raise TypeError('Expected numpy.ndarray or PIL.Image' +

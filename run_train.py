@@ -42,16 +42,20 @@ class Learner:
 
         self.accuracy_fn = aggregate_accuracy
 
+        self.params = [p for p in self.model.parameters() if p.requires_grad]
+
+        self.scaler = torch.cuda.amp.GradScaler()
+
         if self.args.opt == "sgd":
             self.optimizer = torch.optim.SGD(
-                self.model.parameters(),
+                self.params,
                 lr=self.args.learning_rate,
                 momentum=0.9,
                 weight_decay=5e-4,
                 nesterov=True)
         if self.args.opt == "adam":
             self.optimizer = torch.optim.Adam(
-                self.model.parameters(),
+                self.params,
                 lr=self.args.learning_rate,
                 betas=(0.9, 0.999),
                 weight_decay=5e-4)
@@ -87,10 +91,11 @@ class Learner:
                             help="Target samples (i.e. queries) per class used for training.")
         parser.add_argument("--query_per_class_test", "-qpct", type=int, default=1,
                             help="Target samples (i.e. queries) per class used for testing.")
+        parser.add_argument("--num_val_tasks", type=int, default=1000, help="number of random tasks to valid on.")
         parser.add_argument("--num_test_tasks", type=int, default=10000, help="number of random tasks to test on.")
         parser.add_argument("--seq_len", type=int, default=8, help="Frames per video.")
         parser.add_argument("--num_workers", type=int, default=8, help="Num dataloader workers.")
-        parser.add_argument("--backbone", choices=["ResNet", "ViT"], default="ResNet")
+        parser.add_argument("--backbone", default="ResNet")
         parser.add_argument("--opt", choices=["adam", "sgd"], default="sgd", help="Optimizer")
         parser.add_argument("--img_size", type=int, default=224, help="Input image size to the CNN after cropping.")
         parser.add_argument("--num_gpus", type=int, default=1, help="Number of GPUs to split the ResNet over")
@@ -118,25 +123,11 @@ class Learner:
         args.steps = [0, 3, 5, 7]
         args.lrs = [1, 0.5, 0.1, 0.01]
         args.max_epoch = 10
-        if 'hmdb' in args.dataset:
-            args.traintestlist = "splits/hmdb"
-            args.checkpoint_dir = os.path.join(checkpoint_dir, 'hmdb', dir_text)
-            
-        if 'kinetics' in args.dataset:
-            args.traintestlist = "splits/kinetics"
-            args.checkpoint_dir = os.path.join(checkpoint_dir, 'kinetics100', dir_text)
-            
-        if 'ucf' in args.dataset:
-            args.traintestlist = "splits/ucf"
-            args.checkpoint_dir = os.path.join(checkpoint_dir, 'ucf', dir_text)
-            
-        if 'ssv2_small' in args.dataset:
-            args.traintestlist = "splits/ssv2_small"
-            args.checkpoint_dir = os.path.join(checkpoint_dir, 'ssv2_small', dir_text)
+    
+        args.checkpoint_dir = os.path.join(checkpoint_dir, args.dataset, dir_text)
             
         args.print_freq = args.training_iterations // 100
         args.val_iter = args.training_iterations // 20
-        args.num_val_tasks = args.num_test_tasks
 
         return args
 
@@ -160,7 +151,6 @@ class Learner:
         for task_dict in self.video_loader:
             if iteration >= total_iterations:
                 break
-            iteration += 1
             torch.set_grad_enabled(True)
 
             lr = lr_policy.get_epoch_lr(self.args, float(iteration) / self.args.steps_iter)
@@ -183,7 +173,8 @@ class Learner:
             # optimize
             if ((iteration + 1) % self.args.tasks_per_batch == 0) or \
                     (iteration == (total_iterations - 1)):
-                self.optimizer.step()
+                self.scaler.step(self.optimizer)
+                self.scaler.update()
                 self.optimizer.zero_grad()
 
             # print training stats
@@ -208,7 +199,7 @@ class Learner:
                 if self.args.test_later:
                     self.save_checkpoint(iteration + 1, "checkpoint_{}.pt".format(iteration + 1))
                 else:
-                    accuracy_dict = self.evaluate("test")
+                    accuracy_dict = self.evaluate("val")
                     acc = accuracy_dict[self.args.dataset]["acc"]
                     con = accuracy_dict[self.args.dataset]["con"]
                     text = 'Test Result Acc: {:.1f}+/-{:.1f}\n'.format(acc, con)
@@ -223,6 +214,8 @@ class Learner:
 
                     self.save_checkpoint(iteration + 1, "checkpoint_final.pt")
 
+            iteration += 1
+
         # save the final model
         self.save_checkpoint(iteration + 1, "checkpoint_final.pt")
         print_and_log(self.logfile, last_text)
@@ -236,7 +229,7 @@ class Learner:
         self.model.train()
 
         task_dict = self.prepare_task(task_dict)
-        with torch.cuda.amp.autocast():
+        with torch.autocast(device_type=self.device.type):
             model_dict = self.model(task_dict['support_set'],
                                     task_dict['support_labels'],
                                     task_dict['target_set'],
@@ -250,12 +243,8 @@ class Learner:
             loss = 0
             for key in task_loss_dict.keys():
                 loss += task_loss_dict.get(key) / self.args.tasks_per_batch
-
-        if math.isnan(loss):
-            loss.backward(retain_graph=False)
-            self.optimizer.zero_grad()
-        else:
-            loss.backward(retain_graph=False)
+            
+        self.scaler.scale(loss).backward(retain_graph=False)
 
         return task_loss_dict, task_accruacy_dict
 
