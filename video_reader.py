@@ -69,6 +69,8 @@ class VideoDataset(torch.utils.data.Dataset):
 
         self.annotation_path = args.traintestlist
 
+        self.sampling_strategy = args.sampling_strategy
+
         self.way=args.way
         self.eval_way=args.eval_way
         self.shot=args.shot
