@@ -11,7 +11,6 @@ from model_util import Discriminative_Pattern_Matching_without_sim
 class CNN_FSHead(nn.Module):
     def __init__(self, args):
         super(CNN_FSHead, self).__init__()
-        self.train()
         self.args = args
 
         last_layer_idx = -2
