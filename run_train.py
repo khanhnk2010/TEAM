@@ -91,7 +91,7 @@ class Learner:
                             help="Target samples (i.e. queries) per class used for training.")
         parser.add_argument("--query_per_class_test", "-qpct", type=int, default=1,
                             help="Target samples (i.e. queries) per class used for testing.")
-        parser.add_argument("--num_val_tasks", type=int, default=1000, help="number of random tasks to valid on.")
+        parser.add_argument("--num_val_tasks", type=int, default=300, help="number of random tasks to valid on.")
         parser.add_argument("--num_test_tasks", type=int, default=10000, help="number of random tasks to test on.")
         parser.add_argument("--seq_len", type=int, default=8, help="Frames per video.")
         parser.add_argument("--num_workers", type=int, default=8, help="Num dataloader workers.")
@@ -118,8 +118,8 @@ class Learner:
         else:
             dir_text = '/'.join([args.method, args.backbone, '{}-way_{}-shot'.format(args.way, args.shot), 'an{}'.format(args.agg_num)])
 
-        args.training_iterations = 1000
-        args.steps_iter = 1000
+        args.training_iterations = 2000
+        args.steps_iter = 200
         args.steps = [0, 3, 5, 7]
         args.lrs = [1, 0.5, 0.1, 0.01]
         args.max_epoch = 10
