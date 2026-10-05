@@ -44,7 +44,7 @@ class Learner:
 
         self.params = [p for p in self.model.parameters() if p.requires_grad]
 
-        self.scaler = torch.cuda.amp.GradScaler()
+        self.scaler = torch.amp.GradScaler('cuda')
 
         if self.args.opt == "sgd":
             self.optimizer = torch.optim.SGD(
@@ -118,7 +118,7 @@ class Learner:
         else:
             dir_text = '/'.join([args.method, args.backbone, '{}-way_{}-shot'.format(args.way, args.shot), 'an{}'.format(args.agg_num)])
 
-        args.training_iterations = 10000
+        args.training_iterations = 1000
         args.steps_iter = 1000
         args.steps = [0, 3, 5, 7]
         args.lrs = [1, 0.5, 0.1, 0.01]
