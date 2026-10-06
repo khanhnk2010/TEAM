@@ -165,7 +165,7 @@ class VideoDataset(torch.utils.data.Dataset):
 
     """Gets a single video sequence. Handles sampling if there are more frames than specified. """
     def get_seq(self, label, idx=-1):
-        c = self.get_train_val_or_test_db()
+        c = self.get_train_val_or_test_db(self.split)
         paths, vid_id = c.get_rand_vid(label, idx)
         n_frames = len(paths)
 
