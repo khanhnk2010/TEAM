@@ -62,6 +62,7 @@ class VideoDataset(torch.utils.data.Dataset):
 
         self.data_dir = args.dataset
         self.seq_len = args.seq_len
+        self.num_frame = args.num_frame
         self.split = "train"
         self.tensor_transform = transforms.Compose([transforms.ToTensor(),
                                                     transforms.Normalize(mean=[0.45, 0.45, 0.45],
@@ -122,7 +123,7 @@ class VideoDataset(torch.utils.data.Dataset):
                 for video_folder in video_folders:
                     
                     imgs = os.listdir(os.path.join(self.data_dir, split, class_folder, video_folder))
-                    if len(imgs) < self.seq_len:
+                    if len(imgs) < self.num_frame:
                         continue
                     imgs.sort()
                     paths = [os.path.join(self.data_dir, split, class_folder, video_folder, img) for img in imgs]
@@ -170,12 +171,12 @@ class VideoDataset(torch.utils.data.Dataset):
         n_frames = len(paths)
 
         if self.split == "train":
-            interval = n_frames // self.args.seq_len
-            idxs = [random.randint(ind*interval, ind*interval+interval-1) for ind in range(self.args.seq_len)]
+            interval = n_frames // self.args.num_frame
+            idxs = [random.randint(ind*interval, ind*interval+interval-1) for ind in range(self.args.num_frame)]
             imgs = [self.read_single_image(paths[i]) for i in idxs]
         else:
-            interval = n_frames // self.args.seq_len
-            idxs = [int((ind*interval + ind*interval+interval-1) / 2) for ind in range(self.args.seq_len)]
+            interval = n_frames // self.args.num_frame
+            idxs = [int((ind*interval + ind*interval+interval-1) / 2) for ind in range(self.args.num_frame)]
             # idx_f = np.linspace(0, n_frames-1, num=self.args.seq_len)
             # idxs = [int(f) for f in idx_f]
             imgs = [self.read_single_image(paths[i]) for i in idxs]
