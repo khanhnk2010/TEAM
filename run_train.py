@@ -92,7 +92,7 @@ class Learner:
         parser.add_argument("--query_per_class_test", "-qpct", type=int, default=1,
                             help="Target samples (i.e. queries) per class used for testing.")
         parser.add_argument("--num_val_tasks", type=int, default=300, help="number of random tasks to valid on.")
-        parser.add_argument("--num_test_tasks", type=int, default=10000, help="number of random tasks to test on.")
+        parser.add_argument("--num_test_tasks", type=int, default=1000, help="number of random tasks to test on.")
         parser.add_argument("--seq_len", type=int, default=8, help="Frames per video.")
         parser.add_argument("--num_workers", type=int, default=8, help="Num dataloader workers.")
         parser.add_argument("--backbone", default="ResNet")
