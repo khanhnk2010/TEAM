@@ -68,8 +68,6 @@ class VideoDataset(torch.utils.data.Dataset):
                                                                          std=[0.225, 0.225, 0.225])])
         self.img_size = args.img_size
 
-        self.annotation_path = args.traintestlist
-
         self.way=args.way
         self.eval_way=args.eval_way
         self.shot=args.shot
