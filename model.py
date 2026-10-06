@@ -28,7 +28,7 @@ def load_videomae_v2(checkpoint=DEFAULT_CHECKPOINT, device=None):
     return model, device
 
 @torch.inference_mode()
-def extract_frame_vectors(model, input_clips):
+def extract_frame_vectors(model, input_clips, seq_len):
     B = input_clips.shape[0] // seq_len
     clips = input_clips.view(B, seq_len, 3, 224, 224)
     # clips: (B, 16, 3, 224, 224)
@@ -83,8 +83,8 @@ class CNN_FSHead(nn.Module):
             spt = self.backbone(spt).unsqueeze(dim=-1).unsqueeze(dim=-1)
             tar = self.backbone(tar).unsqueeze(dim=-1).unsqueeze(dim=-1)
         elif self.args.backbone == "VideoMAE":
-            spt = extract_frame_vectors(self.backbone, spt)
-            tar = extract_frame_vectors(self.backbone, tar)
+            spt = extract_frame_vectors(self.backbone, spt, self.seq_len)
+            tar = extract_frame_vectors(self.backbone, tar, self.seq_len)
 
         return spt, tar
 
