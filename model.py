@@ -7,6 +7,7 @@ from utils import extract_class_indices
 from model_util import Discriminative_Pattern_Matching
 from model_util import Discriminative_Pattern_Matching_without_sim
 
+DEFAULT_CHECKPOINT = "OpenGVLab/VideoMAEv2-Base"
 
 def get_device():
     if torch.cuda.is_available():
