@@ -29,27 +29,32 @@ def load_videomae_v2(checkpoint=DEFAULT_CHECKPOINT, device=None):
 
 @torch.inference_mode()
 def extract_frame_vectors(model, input_clips, seq_len, img_size=224, patch_size=16):
-    # input_clips: (N_clips, T, C, H, W)
+    # input_clips: (N_clips * seq_len, 3, H, W)
     B = input_clips.shape[0] // seq_len
     clips = input_clips.view(B, seq_len, 3, img_size, img_size)
-    clips = clips.permute(0, 2, 1, 3, 4).contiguous()   # (B, C, T, H, W)
+    # (B, 16, 3, 224, 224)
 
-    out = model.extract_features(clips)                 # (B, N, D)
-    if isinstance(out, (tuple, list)):
-        out = out[0]
+    num_pairs = seq_len // 2                 # 8
+    clips = clips.view(B, num_pairs, 2, 3, img_size, img_size)
+    # (B, 8, 2, 3, 224, 224)
 
-    B, N, D = out.shape
-    temporal_steps = seq_len // 2                       # tubelet_size=2
-    patches_per_frame = (img_size // patch_size) ** 2   # 196
+    clips = clips.view(B * num_pairs, 2, 3, img_size, img_size)
+    # (8B, 2, 3, 224, 224)
 
-    if N == temporal_steps * patches_per_frame + 1:
-        out = out[:, 1:, :]                             # drop CLS
-        N -= 1
-    assert N == temporal_steps * patches_per_frame, f"Unexpected tokens: {N}"
+    clips = clips.permute(0, 2, 1, 3, 4).contiguous()
+    # (8B, 3, 2, 224, 224)
 
-    x = out.reshape(B, temporal_steps, patches_per_frame, D)
-    return x.mean(dim=2)                                # (B, 8, 768)
+    out = model(clips)
+    hidden = out.last_hidden_state if hasattr(out, "last_hidden_state") else out[0]
+    # whatever the model returns — one vector per 2-frame clip
 
+    # Normalize to (8B, D)
+    if hidden.dim() == 3 and hidden.shape[1] == 1:
+        hidden = hidden.squeeze(1)           # (8B, 1, D) -> (8B, D)
+    # hidden: (8B, D)
+
+    vectors = hidden.view(B, num_pairs, -1)  # (B, 8, D)
+    return vectors
 
 class CNN_FSHead(nn.Module):
     def __init__(self, args):
@@ -114,12 +119,6 @@ class CNN_FSHead(nn.Module):
         return other
 
     def pooling(self, spt, tar):
-        spt = spt.reshape(-1, self.args.seq_len, *list(spt.shape[-3:]))
-        tar = tar.reshape(-1, self.args.seq_len, *list(tar.shape[-3:]))
-
-        spt = spt.mean(dim=-1).mean(dim=-1)
-        tar = tar.mean(dim=-1).mean(dim=-1)
-
         return spt, tar
 
     def reshape(self, spt, tar, spt_labels):
