@@ -28,20 +28,27 @@ def load_videomae_v2(checkpoint=DEFAULT_CHECKPOINT, device=None):
     return model, device
 
 @torch.inference_mode()
-def extract_frame_vectors(model, input_clips, seq_len):
+def extract_frame_vectors(model, input_clips, seq_len, img_size=224, patch_size=16):
+    # input_clips: (N_clips, T, C, H, W)
     B = input_clips.shape[0] // seq_len
-    clips = input_clips.view(B, seq_len, 3, 224, 224)
-    # clips: (B, 16, 3, 224, 224)
-    out = model.extract_features(clips)
-    # out: (B, 1568, 768)  (or 1569 with CLS)
+    clips = input_clips.view(B, seq_len, 3, img_size, img_size)
+    clips = clips.permute(0, 2, 1, 3, 4).contiguous()   # (B, C, T, H, W)
+
+    out = model.extract_features(clips)                 # (B, N, D)
+    if isinstance(out, (tuple, list)):
+        out = out[0]
 
     B, N, D = out.shape
-    temporal_steps = 8
-    tokens_per_step = N // temporal_steps  # 196
+    temporal_steps = seq_len // 2                       # tubelet_size=2
+    patches_per_frame = (img_size // patch_size) ** 2   # 196
 
-    x = out.view(B, temporal_steps, tokens_per_step, D)
-    frame_vectors = x.mean(dim=2)  # (B, 8, 768)
-    return frame_vectors
+    if N == temporal_steps * patches_per_frame + 1:
+        out = out[:, 1:, :]                             # drop CLS
+        N -= 1
+    assert N == temporal_steps * patches_per_frame, f"Unexpected tokens: {N}"
+
+    x = out.reshape(B, temporal_steps, patches_per_frame, D)
+    return x.mean(dim=2)                                # (B, 8, 768)
 
 
 class CNN_FSHead(nn.Module):
