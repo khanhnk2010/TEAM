@@ -3,6 +3,7 @@ import csv
 import shutil
 import argparse
 import subprocess
+import sys
 
 from pathlib import Path
 from dataclasses import dataclass
@@ -82,7 +83,6 @@ def parse_split_line(line):
     line = line.replace("\\", "/")
     class_name, video_name = line.rsplit("/", 1)
 
-    # Also supports lines such as: class/video01.avi 1
     video_name = video_name.split()[0]
     video_id = Path(video_name).stem
 
@@ -356,6 +356,8 @@ def run_preprocessing(
     dry_run=False,
 ):
     results = list(missing)
+    total = len(jobs)
+    processed = 0
 
     with ThreadPoolExecutor(max_workers=num_workers) as executor:
         futures = [
@@ -369,15 +371,15 @@ def run_preprocessing(
             for job in jobs
         ]
 
-        for i, future in enumerate(as_completed(futures), start=1):
+        for future in as_completed(futures):
             result = future.result()
             results.append(result)
+            processed += 1
 
-            if i == 1 or i % 25 == 0 or i == len(jobs):
-                print(
-                    f"[{i}/{len(jobs)}] "
-                    f"{result.status}: {result.video_id}"
-                )
+            sys.stdout.write(f"\rProcessed: {processed}/{total}")
+            sys.stdout.flush()
+
+    sys.stdout.write("\n")
 
     manifest_path = Path(output_dir) / "preprocess_manifest.csv"
 
@@ -464,11 +466,6 @@ def main():
     video_exts = normalize_extensions(config["video_exts"])
     source_layout = config["source_layout"]
 
-    print("Dataset:", args.dataset)
-    print("Source:", args.source_dir)
-    print("Splits:", split_dir)
-    print("Output:", output_dir)
-
     jobs, missing = build_jobs(
         source_dir=args.source_dir,
         split_dir=split_dir,
@@ -477,9 +474,6 @@ def main():
         video_exts=video_exts,
         splits=args.splits,
     )
-
-    print(f"\nJobs found: {len(jobs)}")
-    print(f"Missing videos: {len(missing)}\n")
 
     run_preprocessing(
         jobs=jobs,
