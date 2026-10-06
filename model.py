@@ -46,8 +46,8 @@ def extract_frame_vectors(model, input_clips):
 class CNN_FSHead(nn.Module):
     def __init__(self, args):
         super(CNN_FSHead, self).__init__()
-        self.args = args.pretrained_backbone
-        self.pretrained_backbone = args.
+        self.args = args
+        self.pretrained_backbone = args.pretrained_backbone
         last_layer_idx = -2
 
         if args.backbone == "ResNet":
